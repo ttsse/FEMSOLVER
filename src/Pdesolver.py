@@ -50,12 +50,15 @@ class AdvectionPDE:
         # This is done by solving a mass matrix system for cell diameter / degree.
         self._h = Function(self._V)    
 
+         # When use Q_k elements, please change "Circumradius" to "CellDiameter""
         ah = _create_form(ufl.TrialFunction(self._V) * ufl.TestFunction(self._V) * dx)
         Lh = _create_form(
-            ufl.CellDiameter(self._V.mesh) / self._V.element.basix_element.degree
+            ufl.Circumradius(self._V.mesh) / self._V.element.basix_element.degree
             * ufl.TestFunction(self._V) * dx
         )
         solverh = PETSc.KSP().create(self._V.mesh.comm)
+
+       
         
         # Assemble mass matrix Ah
         Ah = create_matrix(ah)
