@@ -21,7 +21,7 @@ from PBC import PeriodicBC
 rank = MPI.COMM_WORLD.rank
 
 # Create a 1D mesh (interval)
-msh = mesh.create_interval(MPI.COMM_WORLD, nx=100, points=[-1.0,1.0])
+msh = mesh.create_interval(MPI.COMM_WORLD, nx=200, points=[-1.0,1.0])
 
 # Define the function space
 degree = 1
@@ -87,14 +87,14 @@ while t < T - 1.0e-8:
     dt = PDE.compute_dt(flux_prime = [b], currenttime=t, finaltime=T, cfl=CFL)
 
     if N >= 2:
-        udt = PDE.compute_BDF(uh, u1, u2, dt1, dt2)
+        PDE.compute_BDF(udt, uh, u1, u2, dt1, dt2)
         PDE.compute_viscosity(uh, mu, flux_prime = [b])
     
     N = N + 1
 
 
-    u2.x.array[:] = u1.x.array
-    u1.x.array[:] = uh.x.array
+    u2.x.array[:] = u1.x.array[:] 
+    u1.x.array[:] = uh.x.array[:] 
     u1.x.scatter_forward()
     u2.x.scatter_forward()
 
