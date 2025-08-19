@@ -28,8 +28,10 @@ We recommend installing DOLFINx **v0.7.2** using **conda**.
 
 1. **Create and activate a new environment:**
 
+    ```bash
     conda create -n fenicsx-env
     conda activate fenicsx-env
+    ```
 
 2. **Install DOLFINx v0.7.2 and dependencies:**
 
@@ -46,11 +48,16 @@ We recommend installing DOLFINx **v0.7.2** using **conda**.
 
 ## ▶️ Usage
 
-- **You can run the demo scripts using MPI. For example, to run the 2D Burgers demo with 2 processes:**
-    cd FEMSOLVER/demo
-    mpirun -np 2 python3 demo/2DBurgers.py
+- You can run the demo scripts using MPI. For example, to run the 2D Burgers demo with 2 processes:
 
----
+    ```bash
+    cd FEMSOLVER/demo/
+    mpirun -np 2 python3 demo/2DBurgers.py
+    ```
+
+> **Note:** The Periodic Boundary Condition (PBC) is only supported in serial.  
+> Therefore, `demo/1DLinear.py` must be run with **one processor** (no MPI).
+
 
 ## ✨ Acknowledgments
 
