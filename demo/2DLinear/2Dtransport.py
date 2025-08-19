@@ -91,7 +91,7 @@ mu.x.array[:] = 0.0
 mu.x.scatter_forward()
 
 # PDE object
-PDE = AdvectionPDE(a_form, L_form, Lres_form, uh, bcs=[bc])
+PDE = AdvectionPDE(a_form, L_form, Lres_form, uh, bcs=[bc],correction=-1)
 
 t = 0.0
 RK = RungeKutta(PDE)
