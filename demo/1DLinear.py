@@ -1,0 +1,108 @@
+from mpi4py import MPI
+from petsc4py.PETSc import ScalarType
+from dolfinx.fem.forms import form as _create_form
+from dolfinx.fem.assemble import assemble_scalar
+from dolfinx import la, plot
+
+import numpy as np
+
+import ufl
+from dolfinx import fem, mesh
+from ufl import dx
+
+
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+from Pdesolver import AdvectionPDE
+from RungeKutta import RungeKutta
+from PBC import PeriodicBC
+
+rank = MPI.COMM_WORLD.rank
+
+# Create a 1D mesh (interval)
+msh = mesh.create_interval(MPI.COMM_WORLD, nx=100, points=[-1.0,1.0])
+
+# Define the function space
+degree = 1
+V = fem.functionspace(msh, ("Lagrange", degree))
+
+
+tol = 1.0e-5
+def pbc_condition(x):  # puppets at x=1
+        return np.isclose(x[0], 1.0, atol=tol)
+
+def pbc_relation(x):   # map (1) -> (0)
+    y = x.copy()
+    y[0] = -1.0
+    return y
+
+pbc = PeriodicBC()
+V = pbc.create_periodic_condition(V, pbc_condition, pbc_relation)
+
+
+# Define the initial data
+uh = fem.Function(V)
+uh.interpolate(lambda x: np.exp(-0.5 * ((x[0])*5)**2))
+uh.x.scatter_forward()
+
+
+# Final time
+T = 2.0
+
+# CFL number
+CFL = 0.2
+
+# Define the LHS and RHS terms
+u = ufl.TrialFunction(V)
+v = ufl.TestFunction(V)
+b = fem.Function(V)
+b.interpolate(lambda x: np.full((1, x.shape[1]), ScalarType(1.0)))
+b.x.scatter_forward()
+a = u * v * dx
+L = -b * uh.dx(0) * v * dx 
+
+# Call the solver and obtain the solution
+PDE = AdvectionPDE(a, L, uh, bcs=[])
+
+
+t = 0.0
+
+RK = RungeKutta(PDE)
+
+N = 0
+dt = 0.0 
+
+
+while t < T - 1.0e-8:
+    
+    dt = PDE.compute_dt(flux_prime = [b], currenttime=t, finaltime=T, cfl=CFL)
+
+    uh = RK.RK4(uh,dt)
+    t += dt
+
+    if rank == 0:
+        print(f"current time: {t}, time step: {dt}")
+
+
+
+# +
+try:
+    import pyvista
+    cells, types, x = plot.vtk_mesh(V)
+    grid = pyvista.UnstructuredGrid(cells, types, x)
+    grid.point_data["u"] = uh.x.array.real
+    grid.set_active_scalars("u")
+    plotter = pyvista.Plotter()
+    plotter.add_mesh(grid, show_edges=True)
+    warped = grid.warp_by_scalar()
+    plotter.add_mesh(warped)
+    if pyvista.OFF_SCREEN:
+        pyvista.start_xvfb(wait=0.1)
+        plotter.screenshot("uh_poisson.png")
+    else:
+        plotter.show()
+except ModuleNotFoundError:
+    print("'pyvista' is required to visualise the solution")
+    print("Install 'pyvista' with pip: 'python3 -m pip install pyvista'")
+# -
