@@ -69,7 +69,7 @@ L = -b * uh.dx(0) * v * dx - mu * uh.dx(0) * v.dx(0) * dx
 Lres = abs(udt + b * uh.dx(0)) * v * dx 
 
 # Call the solver and obtain the solution
-PDE = AdvectionPDE(a, L, Lres, uh, bcs=[])
+PDE = AdvectionPDE(a, L, Lres, uh, bcs=[], correction=-1)
 
 
 t = 0.0

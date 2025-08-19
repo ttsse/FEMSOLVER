@@ -8,6 +8,7 @@ from dolfinx.fem.assemble import apply_lifting, set_bc
 import dolfinx, ufl
 from ufl import dx
 from Dofmap import DofMappings
+from Lumpedmass import LumpedMass
 
 class AdvectionPDE:
     """
@@ -20,7 +21,7 @@ class AdvectionPDE:
       - Computing residuals and BDF approximations.
     """
 
-    def __init__(self, a, L, Lres, uh, bcs):
+    def __init__(self, a, L, Lres, uh, bcs, correction):
         """
         Parameters
         ----------
@@ -40,9 +41,9 @@ class AdvectionPDE:
         self._Lres = _create_form(Lres)
         self._bcs = bcs
         self._V = uh.function_space
+        self.correction = correction
         self.comm = MPI.COMM_WORLD
 
-        self._solver = PETSc.KSP().create(self.comm)
 
         # ------------------------------------------------------------------
         # Mesh-dependent scaling: compute "h" (cell size function).
@@ -91,6 +92,9 @@ class AdvectionPDE:
         # Dof mapping (cell → dofs)
         self._DM = DofMappings().get_cell_dofs(self._V.mesh, self._V)
 
+        # Lumped mass operator (with optional correction)
+        self._LM = LumpedMass(self._A, correction)
+
 
     # ----------------------------------------------------------------------
     def assemble_matrix(self):
@@ -98,7 +102,7 @@ class AdvectionPDE:
         self._A.zeroEntries()
         assemble_matrix_mat(self._A, self._a, bcs=self._bcs)
         self._A.assemble()
-        self._solver.setOperators(self._A)
+
         
     # ----------------------------------------------------------------------
     def assemble_vector(self):
@@ -138,10 +142,10 @@ class AdvectionPDE:
     # ----------------------------------------------------------------------
     def solve(self):
         
-        udt = dolfinx.fem.Function(self._V)
-        x = dolfinx.la.create_petsc_vector_wrap(udt.x)
-        self._solver.solve(self._b, x)
-        udt.x.scatter_forward()
+        """
+        Solve mass system (consistent or lumped) for current RHS vector.
+        """
+        udt = self._LM.get_dk(self._b, self._V)
         return udt
     
     # ----------------------------------------------------------------------
@@ -202,7 +206,7 @@ class AdvectionPDE:
 
         ures = dolfinx.fem.Function(self._V)
         x = dolfinx.la.create_petsc_vector_wrap(ures.x)
-        self._solver.solve(self._bres, x)
+        x.pointwiseDivide(self._bres, self._LM._lumpedM)
         ures.x.scatter_forward()
 
         return ures
