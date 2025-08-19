@@ -36,12 +36,16 @@ We recommend installing DOLFINx **v0.7.2** using **conda**.
 2. **Install DOLFINx v0.7.2 and dependencies:**
 
 - **Linux/macOS:**
-  
+    
+    ```bash
     conda install -c conda-forge fenics-dolfinx=0.7.2 mpich pyvista
+    ```
 
 - **Windows:**
-  
+    
+    ```bash
     conda install -c conda-forge fenics-dolfinx=0.7.2 pyvista pyamg
+    ```
     
 ---
 

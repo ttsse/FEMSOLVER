@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
 from Pdesolver import AdvectionPDE
 from RungeKutta import RungeKutta
 from PBC import PeriodicBC
+from Visualizer import Visualizer
 
 rank = MPI.COMM_WORLD.rank
 
@@ -81,6 +82,11 @@ dt = 0.0
 dt1 = 0.0
 dt2 = 0.0 
 
+viz = Visualizer()
+viz.plot_function(V, uh) 
+
+
+showtime = 0.0
 
 while t < T - 1.0e-8:
     
@@ -107,25 +113,10 @@ while t < T - 1.0e-8:
     if rank == 0:
         print(f"current time: {t}, time step: {dt}")
 
+    if t>= showtime:
+         viz.plot_function(V, uh) 
+         showtime += 0.1
 
 
-# +
-try:
-    import pyvista
-    cells, types, x = plot.vtk_mesh(V)
-    grid = pyvista.UnstructuredGrid(cells, types, x)
-    grid.point_data["u"] = uh.x.array.real
-    grid.set_active_scalars("u")
-    plotter = pyvista.Plotter()
-    plotter.add_mesh(grid, show_edges=True)
-    warped = grid.warp_by_scalar()
-    plotter.add_mesh(warped)
-    if pyvista.OFF_SCREEN:
-        pyvista.start_xvfb(wait=0.1)
-        plotter.screenshot("uh_poisson.png")
-    else:
-        plotter.show()
-except ModuleNotFoundError:
-    print("'pyvista' is required to visualise the solution")
-    print("Install 'pyvista' with pip: 'python3 -m pip install pyvista'")
-# -
+
+viz.plot_function(V, uh) 
