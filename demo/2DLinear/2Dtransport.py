@@ -109,13 +109,13 @@ while t < T - 1.0e-8:
     dt = PDE.compute_dt(flux_prime=[b1, b2], currenttime=t, finaltime=T, cfl=CFL)
 
     if N >= 2:
-        udt = PDE.compute_BDF(uh, u1, u2, dt1, dt2)
+        PDE.compute_BDF(udt, uh, u1, u2, dt1, dt2)
         PDE.compute_viscosity(uh, mu, flux_prime=[b1, b2])
         
     N += 1
 
-    u2.x.array[:] = u1.x.array
-    u1.x.array[:] = uh.x.array
+    u2.x.array[:] = u1.x.array[:] 
+    u1.x.array[:] = uh.x.array[:] 
     u1.x.scatter_forward()
     u2.x.scatter_forward()
 

@@ -145,7 +145,7 @@ class AdvectionPDE:
         return udt
     
     # ----------------------------------------------------------------------
-    def compute_BDF(self, u, u1, u2, kn, kn0):
+    def compute_BDF(self, udt, u, u1, u2, kn, kn0):
         """
         Compute BDF approximation of the time derivative using three solutions.
 
@@ -156,8 +156,6 @@ class AdvectionPDE:
         kn, kn0 : float
             Time step sizes.
         """        
-        udt = dolfinx.fem.Function(self._V)
-    
         dt1 = kn
         dt2 = kn + kn0
         C1 = (dt2 * dt2 - dt1 * dt1) / (dt1 * dt2)
@@ -170,9 +168,6 @@ class AdvectionPDE:
                 + C2 * u1.x.array[i]
                 + C3 * u2.x.array[i]
             ) / (dt2 - dt1)
-
-        return udt
-
 
     # ----------------------------------------------------------------------
     def Linf_u(self, u):
