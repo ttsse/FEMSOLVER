@@ -43,6 +43,11 @@ V = pbc.create_periodic_condition(V, pbc_condition, pbc_relation)
 
 # Define the initial data
 uh = fem.Function(V)
+udt = fem.Function(V)
+u1 = fem.Function(V)
+u2 = fem.Function(V)
+mu = fem.Function(V)
+
 uh.interpolate(lambda x: np.exp(-0.5 * ((x[0])*5)**2))
 uh.x.scatter_forward()
 
@@ -60,10 +65,11 @@ b = fem.Function(V)
 b.interpolate(lambda x: np.full((1, x.shape[1]), ScalarType(1.0)))
 b.x.scatter_forward()
 a = u * v * dx
-L = -b * uh.dx(0) * v * dx 
+L = -b * uh.dx(0) * v * dx - mu * uh.dx(0) * v.dx(0) * dx
+Lres = abs(udt + b * uh.dx(0)) * v * dx 
 
 # Call the solver and obtain the solution
-PDE = AdvectionPDE(a, L, uh, bcs=[])
+PDE = AdvectionPDE(a, L, Lres, uh, bcs=[])
 
 
 t = 0.0
@@ -72,11 +78,28 @@ RK = RungeKutta(PDE)
 
 N = 0
 dt = 0.0 
+dt1 = 0.0
+dt2 = 0.0 
 
 
 while t < T - 1.0e-8:
     
     dt = PDE.compute_dt(flux_prime = [b], currenttime=t, finaltime=T, cfl=CFL)
+
+    if N >= 2:
+        udt = PDE.compute_BDF(uh, u1, u2, dt1, dt2)
+        PDE.compute_viscosity(uh, mu, flux_prime = [b])
+    
+    N = N + 1
+
+
+    u2.x.array[:] = u1.x.array
+    u1.x.array[:] = uh.x.array
+    u1.x.scatter_forward()
+    u2.x.scatter_forward()
+
+    dt2 = dt1
+    dt1 = dt
 
     uh = RK.RK4(uh,dt)
     t += dt
