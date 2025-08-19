@@ -44,6 +44,13 @@ We recommend installing DOLFINx **v0.7.2** using **conda**.
 ---
 
 
+## ▶️ Usage
+
+- **You can run the demo scripts using MPI. For example, to run the 2D Burgers demo with 2 processes:**
+    cd FEMSOLVER/demo
+    mpirun -np 2 python3 demo/2DBurgers.py
+
+---
 
 ## ✨ Acknowledgments
 
