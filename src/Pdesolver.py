@@ -7,7 +7,7 @@ from dolfinx.fem.petsc import assemble_matrix_mat, create_matrix, create_vector,
 from dolfinx.fem.assemble import apply_lifting, set_bc
 import dolfinx, ufl
 from ufl import dx
-
+from Dofmap import DofMappings
 
 class AdvectionPDE:
     """
@@ -16,9 +16,11 @@ class AdvectionPDE:
     Responsibilities:
       - Assembling system matrices and vectors.
       - Computing time step restrictions (CFL condition).
+      - Computing viscosity terms (for stabilization).
+      - Computing residuals and BDF approximations.
     """
 
-    def __init__(self, a, L, uh, bcs):
+    def __init__(self, a, L, Lres, uh, bcs):
         """
         Parameters
         ----------
@@ -26,6 +28,8 @@ class AdvectionPDE:
             Bilinear form defining the PDE operator.
         L : ufl form
             Linear form for the system RHS.
+        Lres : ufl form
+            Residual form (used in viscosity calculation).
         uh : Function
             Current solution function (provides function space).
         bcs : list
@@ -33,6 +37,7 @@ class AdvectionPDE:
         """
         self._a = _create_form(a)
         self._L = _create_form(L)
+        self._Lres = _create_form(Lres)
         self._bcs = bcs
         self._V = uh.function_space
         self.comm = MPI.COMM_WORLD
@@ -80,7 +85,11 @@ class AdvectionPDE:
         # Define global system matrix and RHS vectors
         self._A = create_matrix(self._a)
         self._b = create_vector(self._L)
+        self._bres = create_vector(self._Lres)
         self.assemble_matrix()
+
+        # Dof mapping (cell → dofs)
+        self._DM = DofMappings().get_cell_dofs(self._V.mesh, self._V)
 
 
     # ----------------------------------------------------------------------
@@ -134,6 +143,159 @@ class AdvectionPDE:
         self._solver.solve(self._b, x)
         udt.x.scatter_forward()
         return udt
+    
+    # ----------------------------------------------------------------------
+    def compute_BDF(self, u, u1, u2, kn, kn0):
+        """
+        Compute BDF approximation of the time derivative using three solutions.
+
+        Parameters
+        ----------
+        u, u1, u2 : Functions
+            Current and previous time step solutions.
+        kn, kn0 : float
+            Time step sizes.
+        """        
+        udt = dolfinx.fem.Function(self._V)
+    
+        dt1 = kn
+        dt2 = kn + kn0
+        C1 = (dt2 * dt2 - dt1 * dt1) / (dt1 * dt2)
+        C2 = -dt2 / dt1
+        C3 = dt1 / dt2
+
+        for i in range(len(udt.x.array)):
+            udt.x.array[i] = (
+                C1 * u.x.array[i]
+                + C2 * u1.x.array[i]
+                + C3 * u2.x.array[i]
+            ) / (dt2 - dt1)
+
+        return udt
+
+
+    # ----------------------------------------------------------------------
+    def Linf_u(self, u):
+        """
+        Compute L-infinity norm of u relative to its global average.
+        """
+        usum = 0.0
+        for i in range(len(u.x.array)):
+            usum += u.x.array[i]
+
+        # Compute global average
+        sum_glb = self.comm.allreduce(usum, op=MPI.SUM)
+        avg_glb = sum_glb / u.vector.getSize()
+
+        # Local max deviation
+        umax  = -1.0e5
+        for i in range(len(u.x.array)):
+            umax = max(umax, np.abs(u.x.array[i] - avg_glb))
+
+        # Global max
+        max_glb = self.comm.allreduce(umax, op=MPI.MAX)
+        return max_glb
+        
+    # ----------------------------------------------------------------------
+    def compute_residual(self):
+        """
+        Assemble residual vector and divide by lumped mass to get residual function.
+        """
+        with self._bres.localForm() as b_loc:
+            b_loc.set(0)
+        assemble_vector(self._bres, self._Lres)
+
+        ures = dolfinx.fem.Function(self._V)
+        x = dolfinx.la.create_petsc_vector_wrap(ures.x)
+        self._solver.solve(self._bres, x)
+        ures.x.scatter_forward()
+
+        return ures
+
+    # ----------------------------------------------------------------------
+    def compute_difference(self, uh, umax, umin):
+        """
+        Compute local (per-cell) max and min values of uh.
+        Fill into umax and umin functions for slope limiting.
+        """
+        local_max = uh.x.array.max()
+        global_max = self.comm.allreduce(local_max, op=MPI.MAX)
+        local_min = uh.x.array.min()
+        global_min = self.comm.allreduce(local_min, op=MPI.MIN)
+
+        num_entities = self._V.mesh.topology.index_map(self._V.mesh.topology.dim).size_local
+        closure_dofs = self._V.dofmap.cell_dofs(0).size
+        
+        ii = 0
+        for i in range(num_entities):
+            loc_max = -1.0e5
+            loc_min = 1.0e5
+            # Loop over dofs in this cell
+            for j in range(closure_dofs):
+                loc_max = max(loc_max, uh.x.array[self._DM[ii]])
+                loc_min = min(loc_min, uh.x.array[self._DM[ii]])
+                ii += 1
+            
+            # Reset index for cell update
+            ii -= closure_dofs
+            for j in range(closure_dofs):
+                umax.x.array[self._DM[ii]] = loc_max
+                umin.x.array[self._DM[ii]] = loc_min
+                ii += 1
+
+        umax.x.scatter_forward()
+        umin.x.scatter_forward()
+        return global_max, global_min
+
+    # ----------------------------------------------------------------------
+    def compute_viscosity(self, uh, mu, flux_prime):
+        """
+        Compute cell-based artificial viscosity mu using residual and
+        difference-based limiter.
+        """
+        fp = flux_prime
+        N = len(fp)
+
+        # Max/min functions
+        umax = dolfinx.fem.Function(self._V)
+        umin = dolfinx.fem.Function(self._V)
+       
+        global_max, global_min = self.compute_difference(uh, umax, umin)
+
+        # Norm of deviation from average
+        S = self.Linf_u(uh)
+
+        # Residual function
+        ures = self.compute_residual()
+
+        num_entities = self._V.mesh.topology.index_map(self._V.mesh.topology.dim).size_local
+        closure_dofs = self._V.dofmap.cell_dofs(0).size
+
+        ii = 0
+        for i in range(num_entities):
+            beta = -1.0e5
+            res = -1.0e5
+            # Compute characteristic speed beta and residual per cell
+            for j in range(closure_dofs):
+                beta = max(
+                    beta,
+                    np.sqrt(sum(fp[k].x.array[self._DM[ii]] ** 2 for k in range(N)))
+                )
+                res = max(res, abs(ures.x.array[self._DM[ii]]))
+                ii += 1
+            
+            # Reset index
+            ii -= closure_dofs
+            for j in range(closure_dofs):
+                S_loc = S * (1 - 0.5 * (umax.x.array[self._DM[ii]] - umin.x.array[self._DM[ii]]) / (global_max - global_min))
+                mu.x.array[self._DM[ii]] = min(
+                    0.5 * self._h.x.array[self._DM[ii]] * beta,
+                    self._h.x.array[self._DM[ii]] ** 2 * res / S_loc
+                )
+    
+                ii += 1
+             
+        mu.x.scatter_forward()
 
 
 
