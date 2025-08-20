@@ -21,12 +21,23 @@ class Visualizer:
             print("'pyvista' is required to visualise the solution")
             print("Install 'pyvista' with pip: python3 -m pip install pyvista")
 
-    def plot_function(self, V, uh, filename="uh_poisson.png"):
+        # Force off-screen rendering (useful for saving files on clusters/headless servers)
+        if pyvista is not None:
+            pyvista.OFF_SCREEN = True
+
+    def plot_function(self, V, uh, filename=None):
         """
         Plot a dolfinx.Function uh defined on function space V.
 
-        If pyvista.OFF_SCREEN is True, save a screenshot to file.
-        Otherwise, show an interactive plot window.
+        Parameters
+        ----------
+        V : dolfinx.fem.FunctionSpace
+            Function space of uh.
+        uh : dolfinx.fem.Function
+            Solution to plot.
+        filename : str or None
+            If provided, saves figure as an image file.
+            If None, shows an interactive window.
         """
         if pyvista is None:
             return
@@ -43,14 +54,18 @@ class Visualizer:
         warped = grid.warp_by_scalar()
 
         # Setup and render
-        plotter = pyvista.Plotter()
+        plotter = pyvista.Plotter(off_screen=True)
         plotter.add_mesh(warped)
 
-        if pyvista.OFF_SCREEN:
-            # Off-screen mode → save screenshot
+        if filename is not None:
+            # Render once before screenshot
+            plotter.show(auto_close=False)  
             plotter.screenshot(filename)
-            print(f"Saved screenshot to {filename}")
+            plotter.close()
+            print(f"✅ Saved screenshot to {filename}")
         else:
             # Interactive mode
+            pyvista.OFF_SCREEN = False
+            plotter = pyvista.Plotter()
+            plotter.add_mesh(warped)
             plotter.show()
-

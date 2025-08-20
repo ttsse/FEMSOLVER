@@ -55,4 +55,4 @@ def generate_mesh(target_dofs, tol=0, max_iter=20):
 
     gmsh.finalize()
 
-generate_mesh(target_dofs=1000)
+generate_mesh(target_dofs=100)
