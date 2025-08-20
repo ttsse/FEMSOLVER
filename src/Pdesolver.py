@@ -50,10 +50,10 @@ class AdvectionPDE:
         # This is done by solving a mass matrix system for cell diameter / degree.
         self._h = Function(self._V)    
 
-         # When use Q_k elements, please change "Circumradius" to "CellDiameter""
+        # When use Q_k elements, please change "Circumradius" to "CellDiameter""
         ah = _create_form(ufl.TrialFunction(self._V) * ufl.TestFunction(self._V) * dx)
         Lh = _create_form(
-            ufl.Circumradius(self._V.mesh) / self._V.element.basix_element.degree
+            ufl.CellDiameter(self._V.mesh) / self._V.element.basix_element.degree
             * ufl.TestFunction(self._V) * dx
         )
         solverh = PETSc.KSP().create(self._V.mesh.comm)
@@ -78,6 +78,8 @@ class AdvectionPDE:
         xh = dolfinx.la.create_petsc_vector_wrap(self._h.x)
         solverh.solve(bh, xh)
         self._h.x.scatter_forward()
+
+        solverh.destroy()   
 
         # Compute global minimum mesh size hm (used in CFL)
         loc_hm = 1.0e5
@@ -162,7 +164,8 @@ class AdvectionPDE:
             Current and previous time step solutions.
         kn, kn0 : float
             Time step sizes.
-        """        
+        """
+
         dt1 = kn
         dt2 = kn + kn0
         C1 = (dt2 * dt2 - dt1 * dt1) / (dt1 * dt2)
@@ -259,10 +262,10 @@ class AdvectionPDE:
         N = len(fp)
 
         # Max/min functions
-        umax = dolfinx.fem.Function(self._V)
+        """ umax = dolfinx.fem.Function(self._V)
         umin = dolfinx.fem.Function(self._V)
        
-        global_max, global_min = self.compute_difference(uh, umax, umin)
+        global_max, global_min = self.compute_difference(uh, umax, umin) """
 
         # Norm of deviation from average
         S = self.Linf_u(uh)
@@ -289,10 +292,10 @@ class AdvectionPDE:
             # Reset index
             ii -= closure_dofs
             for j in range(closure_dofs):
-                S_loc = S * (1 - 0.5 * (umax.x.array[self._DM[ii]] - umin.x.array[self._DM[ii]]) / (global_max - global_min))
+                #S_loc = S * (1 - 0.5 * (umax.x.array[self._DM[ii]] - umin.x.array[self._DM[ii]]) / (global_max - global_min))
                 mu.x.array[self._DM[ii]] = min(
                     0.5 * self._h.x.array[self._DM[ii]] * beta,
-                    self._h.x.array[self._DM[ii]] ** 2 * res / S_loc
+                    self._h.x.array[self._DM[ii]] ** 2 * res / S
                 )
     
                 ii += 1

@@ -28,8 +28,8 @@ rank = MPI.COMM_WORLD.rank  # for rank-0 logging
 msh = mesh.create_rectangle(
     comm=MPI.COMM_WORLD,
     points=((-0.25, -0.25), (1.75, 1.75)),
-    n=(50, 50),
-    cell_type=CellType.triangle,
+    n=(100, 100),
+    cell_type=CellType.quadrilateral,
     ghost_mode=GhostMode.none,
 )
 
@@ -120,7 +120,7 @@ RK = RungeKutta(PDE)
 # -----------------------------------------------------------------------------
 t   = 0.0
 N   = 0          # number of completed steps
-dt  = 0.1        # initial guess (will be overwritten)
+dt  = 0.0        # initial guess (will be overwritten)
 dt1 = 0.0        # previous dt
 dt2 = 0.0        # dt from two steps back
 
@@ -129,9 +129,9 @@ dt2 = 0.0        # dt from two steps back
 # Output (ParaView): write viscosity field over time
 # -----------------------------------------------------------------------------
 # Note: ensure the folder "results_burgers" exists before running.
-with io.VTKFile(msh.comm, "results_burgers/solution.pvd", "w") as vtk:
+with io.VTKFile(msh.comm, "results_burgers/viscosity.pvd", "w") as vtk:
     vtk.write_mesh(msh)
-    vtk.write_function(uh, t=t)
+    vtk.write_function(mu, t=t)
 
     # Main time-integration loop
     while t < T - 1.0e-7:
@@ -161,7 +161,7 @@ with io.VTKFile(msh.comm, "results_burgers/solution.pvd", "w") as vtk:
 
         # Advance physical time, write viscosity snapshot, log progress
         t += dt
-        vtk.write_function(uh, t=t)
+        vtk.write_function(mu, t=t)
         if rank == 0:
             print(f"current time: {t:.6f}, time step: {dt:.6e}")
 

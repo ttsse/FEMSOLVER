@@ -24,7 +24,7 @@ The code is designed to be **extensible**: you can define custom conservation la
 
 ## 📦 Installation
 
-We recommend installing DOLFINx **v0.7.2** using **conda**.  
+This project was developed with **DOLFINx v0.7.2**. We recommend installing DOLFINx via **conda**. 
 
 1. **Create and activate a new environment:**
 
@@ -46,7 +46,9 @@ We recommend installing DOLFINx **v0.7.2** using **conda**.
     ```bash
     conda install -c conda-forge fenics-dolfinx=0.7.2 pyvista pyamg
     ```
-    
+
+More detailed installation instructions can be found in the [official DOLFINx repository](https://github.com/FEniCS/dolfinx).
+
 ---
 
 

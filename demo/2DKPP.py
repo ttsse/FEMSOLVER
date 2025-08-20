@@ -104,7 +104,7 @@ for i in range(len(mu.x.array)):
 
 # --- PDE wrapper and time integrator -----------------------------------------
 # AdvectionPDE provides: matrix assembly, dt suggestion, BDF bootstrap, viscosity.
-PDE = AdvectionPDE(a, L, Lres, uh, bcs=[bc], correction=4)
+PDE = AdvectionPDE(a, L, Lres, uh, bcs=[bc], correction=-1)
 
 # SSP Runge–Kutta(5,4) time-stepping for nonlinear advection–diffusion.
 RK = RungeKutta(PDE)
@@ -121,9 +121,9 @@ dt2 = 0.0          # step before previous
 
 # --- Output (ParaView) --------------------------------------------------------
 # Writes mesh once, then appends solution states; ensure "results_4c" exists.
-with io.VTKFile(msh.comm, "results_4c/solution.pvd", "w") as vtk:
+with io.VTKFile(msh.comm, "results/viscosity.pvd", "w") as vtk:
     vtk.write_mesh(msh)
-    vtk.write_function(uh, t=t)
+    vtk.write_function(mu, t=t)
 
     # --- Main time integration loop ------------------------------------------
     while t < T:
@@ -138,11 +138,10 @@ with io.VTKFile(msh.comm, "results_4c/solution.pvd", "w") as vtk:
         N += 1
 
         # Shift solution history: u2 <- u1 <- uh
-        u2.x.array[:] = u1.x.array[:] 
-        u1.x.array[:] = uh.x.array[:] 
+        u2.x.array[:] = u1.x.array[:]
+        u1.x.array[:] = uh.x.array[:]
         u1.x.scatter_forward()
         u2.x.scatter_forward()
-
 
         # Slide the time step history as well.
         dt2 = dt1
@@ -160,5 +159,5 @@ with io.VTKFile(msh.comm, "results_4c/solution.pvd", "w") as vtk:
 
         # Advance physical time, dump state, log step size.
         t += dt
-        vtk.write_function(uh, t=t)
+        vtk.write_function(mu, t=t)
         print(t, dt)
